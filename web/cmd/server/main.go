@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/small-engineer/go-web-serv/web/internal/adapter/httpadapter"
 	infra "github.com/small-engineer/go-web-serv/web/internal/infra/db"
@@ -14,20 +16,54 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-func getenv(k, def string) string {
+const devEnvFile = ".env.dev"
+
+func loadDevEnv() {
+	f, err := os.Open(devEnvFile)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		ln := strings.TrimSpace(sc.Text())
+		if ln == "" {
+			continue
+		}
+		if strings.HasPrefix(ln, "#") {
+			continue
+		}
+		if strings.HasPrefix(ln, "export ") {
+			ln = strings.TrimSpace(ln[len("export "):])
+		}
+		i := strings.IndexByte(ln, '=')
+		if i <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(ln[:i])
+		v := strings.TrimSpace(ln[i+1:])
+		if k == "" {
+			continue
+		}
+		os.Setenv(k, v)
+	}
+}
+
+func getenv(k string) string {
 	v := os.Getenv(k)
 	if v == "" {
-		return def
+		log.Fatalf("env %s is not set", k)
 	}
 	return v
 }
 
 func newDB() (*sql.DB, error) {
-	host := getenv("DB_HOST", "127.0.0.1")
-	port := getenv("DB_PORT", "3306")
-	user := getenv("DB_USER", "app")
-	pass := getenv("DB_PASSWORD", "apppass")
-	name := getenv("DB_NAME", "web")
+	host := getenv("DB_HOST")
+	port := getenv("DB_PORT")
+	user := getenv("DB_USER")
+	pass := getenv("DB_PASSWORD")
+	name := getenv("DB_NAME")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci", user, pass, host, port, name)
 	db, err := sql.Open("mysql", dsn)
@@ -41,6 +77,8 @@ func newDB() (*sql.DB, error) {
 }
 
 func main() {
+	loadDevEnv()
+
 	db, err := newDB()
 	if err != nil {
 		log.Fatal(err)

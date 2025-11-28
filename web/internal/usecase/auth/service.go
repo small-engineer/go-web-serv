@@ -2,9 +2,14 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"strings"
+
+	"golang.org/x/crypto/argon2"
 
 	"github.com/small-engineer/go-web-serv/web/internal/domain"
 )
@@ -38,9 +43,76 @@ func NewService(u UserRepo) *Service {
 	}
 }
 
-func hashPass(pw string) string {
-	sum := sha256.Sum256([]byte(pw))
-	return hex.EncodeToString(sum[:])
+func hashPass(pw string) (string, error) {
+	salt := make([]byte, 16)
+	_, err := rand.Read(salt)
+	if err != nil {
+		return "", err
+	}
+
+	t := uint32(1)
+	m := uint32(64 * 1024)
+	p := uint8(4)
+	k := uint32(32)
+
+	h := argon2.IDKey([]byte(pw), salt, t, m, p, k)
+
+	sEnc := base64.RawStdEncoding.EncodeToString(salt)
+	hEnc := base64.RawStdEncoding.EncodeToString(h)
+
+	v := fmt.Sprintf("argon2id$%d$%d$%d$%d$%s$%s", t, m, p, k, sEnc, hEnc)
+
+	return v, nil
+}
+
+func verifyPass(pw, enc string) (bool, error) {
+	parts := strings.Split(enc, "$")
+	if len(parts) != 7 {
+		return false, errors.New("invalid hash format")
+	}
+	if parts[0] != "argon2id" {
+		return false, errors.New("unsupported hash algorithm")
+	}
+
+	var t uint32
+	var m uint32
+	var p uint8
+	var k uint32
+
+	_, err := fmt.Sscanf(parts[1], "%d", &t)
+	if err != nil {
+		return false, err
+	}
+	_, err = fmt.Sscanf(parts[2], "%d", &m)
+	if err != nil {
+		return false, err
+	}
+	_, err = fmt.Sscanf(parts[3], "%d", &p)
+	if err != nil {
+		return false, err
+	}
+	_, err = fmt.Sscanf(parts[4], "%d", &k)
+	if err != nil {
+		return false, err
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return false, err
+	}
+	have, err := base64.RawStdEncoding.DecodeString(parts[6])
+	if err != nil {
+		return false, err
+	}
+
+	want := argon2.IDKey([]byte(pw), salt, t, m, p, k)
+
+	if len(want) != len(have) {
+		return false, nil
+	}
+
+	ok := subtle.ConstantTimeCompare(want, have) == 1
+	return ok, nil
 }
 
 func (s *Service) Login(ctx context.Context, name, pass string) (*domain.User, error) {
@@ -51,8 +123,8 @@ func (s *Service) Login(ctx context.Context, name, pass string) (*domain.User, e
 	if u == nil {
 		return nil, ErrInvalidCred
 	}
-	hp := hashPass(pass)
-	if u.PasswordHash != hp {
+	ok, err := verifyPass(pass, u.PasswordHash)
+	if err != nil || !ok {
 		return nil, ErrInvalidCred
 	}
 	return u, nil
@@ -66,9 +138,15 @@ func (s *Service) Register(ctx context.Context, name, pass string) (*domain.User
 	if ex != nil {
 		return nil, ErrUserExists
 	}
+
+	h, err := hashPass(pass)
+	if err != nil {
+		return nil, err
+	}
+
 	u := &domain.User{
 		Name:         name,
-		PasswordHash: hashPass(pass),
+		PasswordHash: h,
 	}
 	if err := s.users.Create(ctx, u); err != nil {
 		return nil, err

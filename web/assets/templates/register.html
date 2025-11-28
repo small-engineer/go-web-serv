@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Register</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <h1 class="title">ユーザー登録</h1>
+
+        {{if .Error}}
+        <p class="msg msg-error">{{.Error}}</p>
+        {{end}}
+
+        <form method="post" action="/register" class="form">
+          <label class="field">
+            <span class="label">ユーザー名</span>
+            <input name="username" class="input" />
+          </label>
+
+          <label class="field">
+            <span class="label">パスワード</span>
+            <input type="password" name="password" class="input" />
+          </label>
+
+          <button type="submit" class="btn btn-primary">登録する</button>
+        </form>
+
+        <p class="link-row">
+          <a href="/login">ログインはこちら</a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

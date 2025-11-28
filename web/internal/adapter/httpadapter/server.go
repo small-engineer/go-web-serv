@@ -2,16 +2,14 @@ package httpadapter
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/small-engineer/go-web-serv/web/internal/domain"
 	"github.com/small-engineer/go-web-serv/web/internal/usecase/auth"
@@ -26,7 +24,7 @@ type Server struct {
 type jwtClaims struct {
 	Sub  string `json:"sub"`
 	Name string `json:"name"`
-	Exp  int64  `json:"exp"`
+	jwt.RegisteredClaims
 }
 
 func loadTmpl() *template.Template {
@@ -43,7 +41,7 @@ func NewServer(a *auth.Service) *Server {
 	t := loadTmpl()
 	s := os.Getenv("JWT_SECRET")
 	if s == "" {
-		s = "dev-secret-change-me"
+		panic("JWT_SECRET is not set")
 	}
 	return &Server{
 		auth: a,
@@ -189,9 +187,6 @@ func (s *Server) currentUser(ctx context.Context, r *http.Request) (*domain.User
 	if err != nil {
 		return nil, false
 	}
-	if cl.Exp <= time.Now().Unix() {
-		return nil, false
-	}
 	u, err := s.auth.GetByID(ctx, domain.UserID(cl.Sub))
 	if err != nil || u == nil {
 		return nil, false
@@ -220,64 +215,38 @@ func (s *Server) renderRegister(w http.ResponseWriter, msg string) {
 }
 
 func (s *Server) issueToken(u *domain.User) (string, error) {
-	h := map[string]string{
-		"alg": "HS256",
-		"typ": "JWT",
-	}
-	hb, err := json.Marshal(h)
-	if err != nil {
-		return "", err
-	}
-	exp := time.Now().Add(24 * time.Hour).Unix()
+	exp := time.Now().Add(24 * time.Hour)
+
 	cl := jwtClaims{
 		Sub:  string(u.ID),
 		Name: u.Name,
-		Exp:  exp,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(exp),
+			Subject:   string(u.ID),
+		},
 	}
-	pb, err := json.Marshal(cl)
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, cl)
+	v, err := tok.SignedString(s.key)
 	if err != nil {
 		return "", err
 	}
-	hEnc := base64.RawURLEncoding.EncodeToString(hb)
-	pEnc := base64.RawURLEncoding.EncodeToString(pb)
-	head := hEnc + "." + pEnc
-	mac := hmac.New(sha256.New, s.key)
-	_, err = mac.Write([]byte(head))
-	if err != nil {
-		return "", err
-	}
-	sig := mac.Sum(nil)
-	sEnc := base64.RawURLEncoding.EncodeToString(sig)
-	return head + "." + sEnc, nil
+	return v, nil
 }
 
 func (s *Server) parseToken(tok string) (*jwtClaims, error) {
-	parts := strings.Split(tok, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("invalid token")
-	}
-	head := parts[0] + "." + parts[1]
-	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, errors.New("invalid token")
-	}
-	mac := hmac.New(sha256.New, s.key)
-	_, err = mac.Write([]byte(head))
+	p, err := jwt.ParseWithClaims(tok, &jwtClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if t.Method != jwt.SigningMethodHS256 {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Method.Alg())
+		}
+		return s.key, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	expSig := mac.Sum(nil)
-	if !hmac.Equal(sig, expSig) {
+	cl, ok := p.Claims.(*jwtClaims)
+	if !ok || !p.Valid {
 		return nil, errors.New("invalid token")
 	}
-	pb, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, errors.New("invalid token")
-	}
-	var cl jwtClaims
-	err = json.Unmarshal(pb, &cl)
-	if err != nil {
-		return nil, errors.New("invalid token")
-	}
-	return &cl, nil
+	return cl, nil
 }
