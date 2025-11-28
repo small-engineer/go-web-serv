@@ -17,10 +17,12 @@ import (
 var (
 	ErrInvalidCred = errors.New("invalid credentials")
 	ErrUserExists  = errors.New("user already exists")
+	ErrEmailExists = errors.New("email already exists")
 )
 
 type UserRepo interface {
 	FindByName(ctx context.Context, name string) (*domain.User, error)
+	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByID(ctx context.Context, id domain.UserID) (*domain.User, error)
 	Create(ctx context.Context, u *domain.User) error
 }
@@ -115,10 +117,16 @@ func verifyPass(pw, enc string) (bool, error) {
 	return ok, nil
 }
 
-func (s *Service) Login(ctx context.Context, name, pass string) (*domain.User, error) {
-	u, err := s.users.FindByName(ctx, name)
+func (s *Service) Login(ctx context.Context, login, pass string) (*domain.User, error) {
+	u, err := s.users.FindByName(ctx, login)
 	if err != nil {
 		return nil, err
+	}
+	if u == nil {
+		u, err = s.users.FindByEmail(ctx, login)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if u == nil {
 		return nil, ErrInvalidCred
@@ -130,13 +138,21 @@ func (s *Service) Login(ctx context.Context, name, pass string) (*domain.User, e
 	return u, nil
 }
 
-func (s *Service) Register(ctx context.Context, name, pass string) (*domain.User, error) {
+func (s *Service) Register(ctx context.Context, name, pass, email string) (*domain.User, error) {
 	ex, err := s.users.FindByName(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if ex != nil {
 		return nil, ErrUserExists
+	}
+
+	ex, err = s.users.FindByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if ex != nil {
+		return nil, ErrEmailExists
 	}
 
 	h, err := hashPass(pass)
@@ -146,6 +162,7 @@ func (s *Service) Register(ctx context.Context, name, pass string) (*domain.User
 
 	u := &domain.User{
 		Name:         name,
+		Email:        email,
 		PasswordHash: h,
 	}
 	if err := s.users.Create(ctx, u); err != nil {

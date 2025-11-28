@@ -14,7 +14,10 @@
         <p class="msg msg-error">{{.Error}}</p>
         {{end}}
 
+        <p class="msg">メールアドレス: {{.Email}}</p>
+
         <form method="post" action="/register" class="form">
+          <input type="hidden" name="token" value="{{.Token}}" />
           <label class="field">
             <span class="label">ユーザー名</span>
             <input name="username" class="input" />

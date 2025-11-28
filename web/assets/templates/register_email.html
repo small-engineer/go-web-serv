@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Email Register</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <h1 class="title">メールアドレス登録</h1>
+
+        {{if .Error}}
+        <p class="msg msg-error">{{.Error}}</p>
+        {{end}} {{if .Message}}
+        <p class="msg">{{.Message}}</p>
+        {{end}}
+
+        <form method="post" action="/register/email" class="form">
+          <label class="field">
+            <span class="label">メールアドレス</span>
+            <input type="email" name="email" class="input" />
+          </label>
+
+          <button type="submit" class="btn btn-primary">
+            確認メールを送信
+          </button>
+        </form>
+
+        <p class="link-row">
+          <a href="/login">ログインはこちら</a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

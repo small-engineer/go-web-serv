@@ -58,4 +58,9 @@ app-shell:
 in-%:
 	$(COMPOSE) exec $* sh
 
-.PHONY: help build up up-db up-app down restart logs ps db-shell app-shell in-%
+## Run app locally (db via Docker on localhost)
+run-local:
+	DB_HOST=127.0.0.1 go run ./cmd/server/main.go
+
+.PHONY: help build up up-db up-app down restart logs ps db-shell app-shell in-% run-local
+

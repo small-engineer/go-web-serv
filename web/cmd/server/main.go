@@ -46,6 +46,9 @@ func loadDevEnv() {
 		if k == "" {
 			continue
 		}
+		if os.Getenv(k) != "" {
+			continue
+		}
 		os.Setenv(k, v)
 	}
 }

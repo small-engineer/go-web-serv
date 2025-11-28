@@ -14,8 +14,8 @@
         {{end}}
         <form method="post" action="/login" class="form">
           <label class="field">
-            <span class="label">ユーザー名</span>
-            <input name="username" class="input" />
+            <span class="label">ユーザー名またはメールアドレス</span>
+            <input name="login" class="input" />
           </label>
           <label class="field">
             <span class="label">パスワード</span>
@@ -24,7 +24,7 @@
           <button type="submit" class="btn btn-primary">ログイン</button>
         </form>
         <p class="link-row">
-          <a href="/register">新規登録はこちら</a>
+          <a href="/register/email">新規登録はこちら</a>
         </p>
       </div>
     </div>

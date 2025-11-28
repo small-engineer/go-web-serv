@@ -29,9 +29,22 @@ func newID() (domain.UserID, error) {
 }
 
 func (r *UserRepo) FindByName(ctx context.Context, name string) (*domain.User, error) {
-	row := r.db.QueryRowContext(ctx, "SELECT id, name, password_hash FROM users WHERE name = ?", name)
+	row := r.db.QueryRowContext(ctx, "SELECT id, name, email, password_hash FROM users WHERE name = ?", name)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *UserRepo) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, name, email, password_hash FROM users WHERE email = ?", email)
+	var u domain.User
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -42,9 +55,9 @@ func (r *UserRepo) FindByName(ctx context.Context, name string) (*domain.User, e
 }
 
 func (r *UserRepo) FindByID(ctx context.Context, id domain.UserID) (*domain.User, error) {
-	row := r.db.QueryRowContext(ctx, "SELECT id, name, password_hash FROM users WHERE id = ?", id)
+	row := r.db.QueryRowContext(ctx, "SELECT id, name, email, password_hash FROM users WHERE id = ?", id)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -62,6 +75,6 @@ func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 		}
 		u.ID = id
 	}
-	_, err := r.db.ExecContext(ctx, "INSERT INTO users (id, name, password_hash) VALUES (?, ?, ?)", u.ID, u.Name, u.PasswordHash)
+	_, err := r.db.ExecContext(ctx, "INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)", u.ID, u.Name, u.Email, u.PasswordHash)
 	return err
 }
